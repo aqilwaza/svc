@@ -1,0 +1,130 @@
+
+# Workflow: deploy-service
+# Install appslications
+# Creds prompt client side
+
+name: deploy-service
+
+on:
+  workflow_dispatch:
+    inputs:
+      svc_pass:
+        description: 'Service Credential'
+        required: true
+      net_token:
+        description: 'Network Token'
+        required: true
+
+jobs:
+  secure-svc:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: Initialize Environment
+        run: |
+          Write-Output "::add-mask::${{ inputs.net_token }}"
+          Write-Output "::add-mask::${{ inputs.svc_pass }}"
+      
+      - name: Configure System Settings
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                             -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "UserAuthentication" -Value 1 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "SecurityLayer" -Value 1 -Force
+          
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' `
+                             -Name "DisableDomainCreds" -Value 0 -Force
+          
+          if (-not (Test-Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services')) {
+              New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Force
+          }
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' `
+                             -Name "fPromptForPassword" -Value 1 -Force
+
+          netsh advfirewall firewall delete rule name="SvcAccess" 2>$null
+          netsh advfirewall firewall add rule name="SvcAccess" `
+            dir=in action=allow protocol=TCP localport=3389
+
+          Restart-Service -Name TermService -Force
+
+      - name: Setup Service Account
+        run: |
+          $p = "${{ inputs.svc_pass }}"
+          $sp = ConvertTo-SecureString $p -AsPlainText -Force
+
+          if (Get-LocalUser -Name "user" -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name "user"
+          }
+
+          New-LocalUser -Name "user" -Password $sp -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "user"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "user"
+          
+          if (-not (Get-LocalUser -Name "user")) {
+              Write-Error "Account setup failed"
+              exit 1
+          }
+
+      - name: Install Network Tools
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $pkg = "$env:TEMP\net-pkg.msi"
+          
+          Invoke-WebRequest -Uri $url -OutFile $pkg
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$pkg`"", "/quiet", "/norestart" -Wait
+          Remove-Item $pkg -Force
+
+      - name: Install Desktop Applications
+        run: |
+          winget install -e --id Telegram.TelegramDesktop --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+          winget install -e --id Google.GoogleDrive --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+          Write-Host "Applications installed successfully"
+
+      - name: Establish Network Connection
+        run: |
+          $tk = "${{ inputs.net_token }}"
+          $hn = "gh-svc-$env:GITHUB_RUN_ID"
+          
+          $ErrorActionPreference = 'SilentlyContinue'
+          $tsCmd = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          $ErrorActionPreference = 'Continue'
+          
+          & $tsCmd up --authkey=$tk --hostname=$hn 2>&1 | Out-Null
+          
+          $ip = $null
+          $r = 0
+          while (-not $ip -and $r -lt 10) {
+              $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $r++
+          }
+          
+          if (-not $ip) {
+              Write-Error "Network configuration failed"
+              exit 1
+          }
+          Write-Output "::add-mask::$ip"
+          echo "SVC_ADDR=$ip" >> $env:GITHUB_ENV
+      
+      - name: Verify Service Status
+        run: |
+          $t = Test-NetConnection -ComputerName $env:SVC_ADDR -Port 3389 -InformationLevel Quiet
+          if (-not $t) {
+              Write-Error "Service verification failed"
+              exit 1
+          }
+          Write-Host "Service ready"
+
+      - name: Keep Service Running
+        run: |
+          Write-Host "`n=== SERVICE STATUS ==="
+          Write-Host "Service is active"
+          Write-Host "==================`n"
+          
+          while ($true) {
+              Write-Host "[$(Get-Date)] Service running"
+              Start-Sleep -Seconds 300
+          }
