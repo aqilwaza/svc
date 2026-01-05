@@ -79,8 +79,9 @@ jobs:
 
       - name: Install Desktop Applications
         run: |
-          winget install -e --id Telegram.TelegramDesktop --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
-          winget install -e --id Google.GoogleDrive --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+          winget install -e --id zhongyang219.TrafficMonitor.Full --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+          winget install -e --id Telegram.TelegramDesktop --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+          winget install -e --id Google.GoogleDrive --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
           Write-Host "Applications installed successfully"
 
       - name: Establish Network Connection
