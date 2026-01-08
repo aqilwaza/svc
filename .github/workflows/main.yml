@@ -79,7 +79,7 @@ jobs:
 
       - name: Install Desktop Applications
         run: |
-          winget install -e --id zhongyang219.TrafficMonitor.Full --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install -e --id zhongyang219.TrafficMonitor.Full --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           winget install -e --id Telegram.TelegramDesktop --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           winget install -e --id Google.GoogleDrive --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           Write-Host "Applications installed successfully"
