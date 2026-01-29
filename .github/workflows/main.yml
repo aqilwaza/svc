@@ -77,15 +77,6 @@ jobs:
           Start-Process msiexec.exe -ArgumentList "/i", "`"$pkg`"", "/quiet", "/norestart" -Wait
           Remove-Item $pkg -Force
 
-      - name: Install Desktop Applications
-        shell: pwsh 
-        run: |
-          winget install -e --id Microsoft.VCRedist.2015+.x64 --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
-          winget install -e --id zhongyang219.TrafficMonitor.Full --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
-          winget install -e --id Telegram.TelegramDesktop --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
-          winget install -e --id Google.GoogleDrive --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
-          Write-Host "Applications installed successfully"
-
       - name: Establish Network Connection
         run: |
           $tk = "${{ inputs.net_token }}"
